@@ -1,7 +1,12 @@
+import { GameSession as BaseGameSession } from "./session";
 import type { Env } from "./session";
 import type { JoinPlayerInput, RollInput, SubmitActionInput } from "./types";
 
-export { GameSession } from "./session";
+export class GameSession extends BaseGameSession {
+  async deleteSession(): Promise<void> {
+    await this.ctx.storage.deleteAll();
+  }
+}
 
 class HttpError extends Error {
   constructor(
@@ -74,6 +79,16 @@ export default {
       const sessionId = decodeURIComponent(match[1]);
       const resource = match[2];
       const stub = getSession(env, sessionId);
+
+      if (request.method === "DELETE" && !resource) {
+        const confirmation = request.headers.get("x-confirm-session-delete");
+        if (confirmation !== sessionId) {
+          throw new HttpError(400, "X-Confirm-Session-Delete must exactly match the session id.");
+        }
+
+        await (stub as unknown as { deleteSession(): Promise<void> }).deleteSession();
+        return json({ deleted: true, sessionId });
+      }
 
       if (request.method === "GET" && !resource) {
         return json(await stub.getState());
